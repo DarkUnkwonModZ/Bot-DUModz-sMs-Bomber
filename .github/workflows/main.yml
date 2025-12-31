@@ -4,15 +4,14 @@ on:
   push:
     branches: [ main ]
   schedule:
-    - cron: "0 */4 * * *" # প্রতি ৪ ঘণ্টা পর পর অটো রান হবে
-  workflow_dispatch: # ম্যানুয়ালি রান করার বাটন
+    - cron: "0 */4 * * *" # প্রতি ৪ ঘণ্টা পর রিস্টার্ট
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -23,26 +22,18 @@ jobs:
           python-version: '3.9'
 
       - name: Install Dependencies
-        run: |
-          pip install pyTelegramBotAPI requests
+        run: pip install pyTelegramBotAPI requests
 
-      - name: Create JSON Files
+      - name: Run Bot
         run: |
-          if [ ! -f users.json ]; then echo "{}" > users.json; fi
-          if [ ! -f keys.json ]; then echo "{}" > keys.json; fi
+          # ৩ ঘণ্টা ৫০ মিনিট পর্যন্ত রান হবে
+          timeout 13800s python bot.py || echo "Session Completed"
 
-      - name: Run Bot (4 Hours Loop)
-        run: |
-          # ৩ ঘণ্টা ৫০ মিনিট পর স্ক্রিপ্টটি কিল হবে যাতে পরের ধাপে ডাটা সেভ হতে পারে
-          timeout 13800s python bot.py || echo "Bot session ended, saving data..."
-
-      - name: Auto Save & Sync Data
+      - name: Sync Data
         if: always()
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git pull origin main # লেটেস্ট কোড পুল করে নেওয়া
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
           git add users.json keys.json
-          # যদি কোনো পরিবর্তন না থাকে তবে এরর দিবে না
-          git commit -m "Sync user database [$(date)]" || exit 0
-          git push origin main
+          git commit -m "Auto Update Database" || exit 0
+          git push
