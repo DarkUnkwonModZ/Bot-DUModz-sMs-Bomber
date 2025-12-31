@@ -1,26 +1,36 @@
-name: SMS Bot 24/7
+name: DU SMS Bot 24/7
 
 on:
+  push:
+    branches: [ main ]
   schedule:
-    - cron: '0 */4 * * *' # প্রতি ৬ ঘণ্টা পর পর অটোমেটিক রিস্টার্ট হবে
-  workflow_dispatch: # ম্যানুয়ালি চালু করার জন্য
+    - cron: "0 */4 * * *" # প্রতি ৪ ঘণ্টা পর পর অটোমেটিক রান হবে
+  workflow_dispatch: # ম্যানুয়ালি রান করার সিস্টেম
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install Dependencies
+        run: pip install pyTelegramBotAPI requests
 
-      - name: Run Bot
-        env:
-          PYTHONUNBUFFERED: 1
-        run: python bot.py
+      - name: Run Bot with Timeout
+        run: |
+          # ৪ ঘণ্টা (১৪৪০০ সেকেন্ড) পর বট অটো বন্ধ হবে যাতে অ্যাকশন আবার শুরু হতে পারে
+          timeout 14400s python bot.py || true 
+
+      - name: Auto Save Data
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add users.json keys.json
+          git commit -m "Save User Data [Automated]" || exit 0
+          git push
