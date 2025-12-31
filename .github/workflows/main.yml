@@ -5,13 +5,13 @@ on:
     branches: [ main ]
   schedule:
     - cron: "0 */4 * * *" # প্রতি ৪ ঘণ্টা পর অটোমেটিক রিস্টার্ট
-  workflow_dispatch: # ম্যানুয়ালি রান করার বাটন
+  workflow_dispatch: # ম্যানুয়ালি রান করার সিস্টেম
 
 jobs:
-  build:
+  run-bot:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # ফাইল সেভ করার অনুমতি
+      contents: write # ফাইল রাইট করার পারমিশন
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -24,21 +24,21 @@ jobs:
       - name: Install Dependencies
         run: pip install pyTelegramBotAPI requests
 
-      - name: Create JSON Files if Missing
+      - name: Initialize Database
         run: |
           if [ ! -f users.json ]; then echo "{}" > users.json; fi
           if [ ! -f keys.json ]; then echo "{}" > keys.json; fi
 
       - name: Run Bot
         run: |
-          # ৩ ঘণ্টা ৫০ মিনিট পর বট থামবে যাতে পরের ৪ ঘণ্টার শিডিউল কাজ শুরু করতে পারে
-          timeout 13800s python bot.py || echo "Restarting for next schedule..."
+          # ৩ ঘণ্টা ৫০ মিনিট পর স্ক্রিপ্ট বন্ধ হবে যাতে ডাটা সেভ হতে পারে
+          timeout 13800s python bot.py || echo "Time to sync data..."
 
-      - name: Save Data Back to Repository
+      - name: Sync and Commit Database
         if: always()
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
+          git config --local user.email "bot@action.com"
+          git config --local user.name "DU-Bot-Action"
           git add users.json keys.json
-          git commit -m "Auto Update Data" || exit 0
+          git commit -m "Auto sync database" || exit 0
           git push
