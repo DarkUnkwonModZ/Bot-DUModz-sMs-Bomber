@@ -1,10 +1,9 @@
 name: SMS Bot 24/7
 
 on:
-  push:
-    branches: [ main ]
   schedule:
-    - cron: '0 */4 * * *' # প্রতি ৬ ঘণ্টা পর পর রিস্টার্ট হবে সেশন বজায় রাখতে
+    - cron: '0 */4 * * *' # প্রতি ৬ ঘণ্টা পর পর অটোমেটিক রিস্টার্ট হবে
+  workflow_dispatch: # ম্যানুয়ালি চালু করার জন্য
 
 jobs:
   build:
