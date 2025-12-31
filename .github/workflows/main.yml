@@ -4,14 +4,15 @@ on:
   push:
     branches: [ main ]
   schedule:
-    - cron: "0 */4 * * *" # প্রতি ৪ ঘণ্টা পর অটোমেটিক রিস্টার্ট
-  workflow_dispatch: # ম্যানুয়ালি রান করার সিস্টেম
+    - cron: "0 */4 * * *" # প্রতি ৪ ঘণ্টা পর পর অটো রান হবে
+  workflow_dispatch: # ম্যানুয়ালি রান করার বাটন
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # ফাইল রাইট করার পারমিশন
+      contents: write
+    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -22,23 +23,26 @@ jobs:
           python-version: '3.9'
 
       - name: Install Dependencies
-        run: pip install pyTelegramBotAPI requests
+        run: |
+          pip install pyTelegramBotAPI requests
 
-      - name: Initialize Database
+      - name: Create JSON Files
         run: |
           if [ ! -f users.json ]; then echo "{}" > users.json; fi
           if [ ! -f keys.json ]; then echo "{}" > keys.json; fi
 
-      - name: Run Bot
+      - name: Run Bot (4 Hours Loop)
         run: |
-          # ৩ ঘণ্টা ৫০ মিনিট পর স্ক্রিপ্ট বন্ধ হবে যাতে ডাটা সেভ হতে পারে
-          timeout 13800s python bot.py || echo "Time to sync data..."
+          # ৩ ঘণ্টা ৫০ মিনিট পর স্ক্রিপ্টটি কিল হবে যাতে পরের ধাপে ডাটা সেভ হতে পারে
+          timeout 13800s python bot.py || echo "Bot session ended, saving data..."
 
-      - name: Sync and Commit Database
+      - name: Auto Save & Sync Data
         if: always()
         run: |
-          git config --local user.email "bot@action.com"
-          git config --local user.name "DU-Bot-Action"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git pull origin main # লেটেস্ট কোড পুল করে নেওয়া
           git add users.json keys.json
-          git commit -m "Auto sync database" || exit 0
-          git push
+          # যদি কোনো পরিবর্তন না থাকে তবে এরর দিবে না
+          git commit -m "Sync user database [$(date)]" || exit 0
+          git push origin main
